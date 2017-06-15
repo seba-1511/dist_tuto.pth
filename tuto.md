@@ -1,4 +1,4 @@
-% Writing Distributed Applications with PyTorch
+% Writing Distributed Applications wib PyTorch
 % Sebastien Arnold
 % June 14, 2017
 
@@ -258,8 +258,17 @@ def gather(tensor, rank, tensor_list=None, root=0, group=None):
 * Point to optimized DistributedDataParallel
 
 # Internals
+* The magic behind init_process_group:
 
-* The magic behind init_process_group
+1. validate and parse the arguments
+2. resolve the backend: name2channel.at()
+3. Drop GIL & THDProcessGroupInit: instantiate the channel and add address of master from config
+4. rank 0 inits master, others workers
+5. master: create sockets for all workers -> wait for all workers to connect -> send them each the info about location of other processes
+6. worker: create socket to master, send own info, receive info about each worker, and then handshake with each of them
+7. By this time everyone has handshake with everyone.
+
+
 
 ### Acknowledgements
 

@@ -5,7 +5,7 @@
         <meta http-equiv="X-UA-Compatible" content="IE=edge">
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <!-- The above 3 meta tags *must* come first in the head; any other head content must come *after* these tags -->
-        <title>Writing Distributed Applications with PyTorch - Sebastien Arnold</title>
+        <title>Writing Distributed Applications wib PyTorch - Sebastien Arnold</title>
 
         <!-- Bootstrap -->
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/3.3.7/css/bootstrap.min.css" />
@@ -133,7 +133,7 @@
                 <!--</ul>-->
                 <!--</nav>-->
 
-                                <h1 class="text-center">Writing Distributed Applications with PyTorch</h1>
+                                <h1 class="text-center">Writing Distributed Applications wib PyTorch</h1>
                 <h4 class="text-sm text-muted text-center"> by Sebastien Arnold,  <span style="font-weight:normal;"><i>June 14, 2017</i></span></h4>
                             </div>
 
@@ -339,8 +339,17 @@
             </ul>
             <h1 id="internals">Internals</h1>
             <ul>
-            <li>The magic behind init_process_group</li>
+            <li>The magic behind init_process_group:</li>
             </ul>
+            <ol style="list-style-type: decimal">
+            <li>validate and parse the arguments</li>
+            <li>resolve the backend: name2channel.at()</li>
+            <li>Drop GIL &amp; THDProcessGroupInit: instantiate the channel and add address of master from config</li>
+            <li>rank 0 inits master, others workers</li>
+            <li>master: create sockets for all workers -&gt; wait for all workers to connect -&gt; send them each the info about location of other processes</li>
+            <li>worker: create socket to master, send own info, receive info about each worker, and then handshake with each of them</li>
+            <li>By this time everyone has handshake with everyone.</li>
+            </ol>
             <h3 id="acknowledgements">Acknowledgements</h3>
             <ul>
             <li>PyTorch docs + well written tests.</li>
@@ -352,7 +361,7 @@
             </ul>
             
             <footer class="footer">
-                <p><b>Writing Distributed Applications with PyTorch</b> - <i>Sebastien Arnold</i>, June 14, 2017.</p>
+                <p><b>Writing Distributed Applications wib PyTorch</b> - <i>Sebastien Arnold</i>, June 14, 2017.</p>
             </footer>
 
         </div> <!-- /container -->
