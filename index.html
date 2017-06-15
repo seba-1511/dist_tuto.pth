@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8">
+        <meta http-equiv="X-UA-Compatible" content="IE=edge">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <!-- The above 3 meta tags *must* come first in the head; any other head content must come *after* these tags -->
+        <title>Writing Distributed Applications with PyTorch - Sebastien Arnold</title>
+
+        <!-- Bootstrap -->
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/3.3.7/css/bootstrap.min.css" />
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootswatch/3.3.7/sandstone/bootstrap.min.css" />
+
+        <!--Prism for code high-lighting-->
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.5.1/themes/prism.min.css" />
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.5.1/themes/prism-solarizedlight.css" / >
+
+        <!--KaTeX for fast embedded math-->
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.6.0/katex.min.css">
+
+        <!--Pseudocode.js-->
+        <link rel="stylesheet" href="https://cdn.rawgit.com/seba-1511/cdn/master/pseudocode.js/pseudocode.min.css">
+
+
+        <style type="text/css" media="all">
+        /* Space out content a bit */
+        body {
+            padding-top: 20px;
+            padding-bottom: 20px;
+        }
+
+        p {
+            font-size: 16px;
+            text-align: justify;
+        }
+
+        /* Everything but the jumbotron gets side spacing for mobile first views */
+        .header,
+        .footer {
+            padding-right: 15px;
+            padding-left: 15px;
+        }
+
+        /* Custom page header */
+        .header {
+            padding-bottom: 20px;
+            border-bottom: 1px solid #e5e5e5;
+        }
+        /* Make the masthead heading the same height as the navigation */
+        .header h3 {
+            margin-top: 0;
+            margin-bottom: 0;
+            line-height: 40px;
+        }
+
+        img {
+            max-width: 100%;
+        }
+
+        /* Custom page footer */
+        .footer {
+            padding-top: 19px;
+            color: #777;
+            border-top: 1px solid #e5e5e5;
+        }
+
+        /* Customize container */
+        @media (min-width: 768px) {
+            .container {
+                                max-width: 730px;
+                            }
+        }
+        .container-narrow > hr {
+            margin: 30px 0;
+        }
+
+        /* Responsive: Portrait tablets and up */
+        @media screen and (min-width: 768px) {
+            /* Remove the padding we set earlier */
+            .header,
+            .marketing,
+            .footer {
+                padding-right: 0;
+                padding-left: 0;
+            }
+            /* Space out the masthead */
+            .header {
+                margin-bottom: 30px;
+            }
+            /* Remove the bottom border on the jumbotron for visual effect */
+            .jumbotron {
+                border-bottom: 0;
+            }
+        }
+
+        .well {
+            border: 1px solid #767676;
+            width: 157px;
+            max-width: 157px;
+        }
+        .well a {
+            color:#767676;
+            margin-bottom:5px;
+        }
+        .well ul {
+            list-style: none;
+            margin: 0px;
+            padding-left: 10px;
+        }
+        </style>
+
+        <!-- HTML5 shim and Respond.js for IE8 support of HTML5 elements and media queries -->
+        <!-- WARNING: Respond.js doesn't work if you view the page via file:// -->
+        <!--[if lt IE 9]>
+            <script src="https://oss.maxcdn.com/html5shiv/3.7.3/html5shiv.min.js"></script>
+            <script src="https://oss.maxcdn.com/respond/1.4.2/respond.min.js"></script>
+        <![endif]-->
+
+
+        <!--Plotly.js-->
+        <!--Needs to be imported before body, else figs won't load.-->
+        <script src="https://cdn.plot.ly/plotly-1.2.0.min.js"></script>
+
+    </head>
+    <body>
+        <div class="container">
+            <div class="header clearfix">
+                <!--<nav>-->
+                <!--<ul class="nav nav-pills pull-right">-->
+                <!--<li role="presentation" class="active"><a href="#">Home</a></li>-->
+                <!--<li role="presentation"><a href="#">About</a></li>-->
+                <!--<li role="presentation"><a href="#">Contact</a></li>-->
+                <!--</ul>-->
+                <!--</nav>-->
+
+                                <h1 class="text-center">Writing Distributed Applications with PyTorch</h1>
+                <h4 class="text-sm text-muted text-center"> by Sebastien Arnold,  <span style="font-weight:normal;"><i>June 14, 2017</i></span></h4>
+                            </div>
+
+                        <div style="margin-top:20px;margin-bottom:20px;"><p><p style="text-align:center;margin:0px;"><b>Abstract</b><p><br/>
+             In this short tutorial, we will be going over the distributed package of PyTorch. We'll see how to set up the distributed setting, use the different communication strategies, and go over part of the internals of the package.
+            
+             </p></div>
+            <h1 id="setup">Setup</h1>
+            <!--
+            * Processes & machines
+            * variables and init_process_group
+            -->
+            <p>The distributed package included in PyTorch (i.e., <code>torch.distributed</code>) enables researchers and practitioners to easily distribute their computations across processes and clusters of machines. To do so, it leverages the messaging passing semantics allowing each process to communicate data to any of the other processes. As opposed to the multiprocessing (<code>torch.multiprocessing</code>) package, processes can use different communication backends and are not restricted to being executed on the same machine.</p>
+            <p>In order to get started we should thus be able to run multiple processes simultaneously. If you have access to compute cluster you should check with your local sysadmin or use your favorite coordination tool. (e.g., <a href="https://linux.die.net/man/1/pdsh">pdsh</a>, <a href="http://cea-hpc.github.io/clustershell/">clustershell</a>, or <a href="https://slurm.schedmd.com/">others</a>) For the purpose of this tutorial, we will use a single machine and can fork multiple processes using the following template.</p>
+            <div class="sourceCode"><pre class="sourceCode python"><code class="sourceCode python"><span class="co">&quot;&quot;&quot;run.py:&quot;&quot;&quot;</span>
+                
+            <span class="co">#!/usr/bin/env python</span>
+            <span class="im">import</span> os
+            <span class="im">import</span> torch
+            <span class="im">import</span> torch.distributed <span class="im">as</span> dist
+            <span class="im">from</span> torch.multiprocessing <span class="im">import</span> Process
+            
+            <span class="kw">def</span> run(rank, size):
+                <span class="co">&quot;&quot;&quot; Distributed function to be implemented later. &quot;&quot;&quot;</span>
+                <span class="cf">pass</span>
+            
+            <span class="kw">def</span> init_processes(rank, size, fn, backend<span class="op">=</span><span class="st">&#39;tcp&#39;</span>):
+                <span class="co">&quot;&quot;&quot; Initialize the distributed environment. &quot;&quot;&quot;</span>
+                os.environ[<span class="st">&#39;MASTER_ADDR&#39;</span>] <span class="op">=</span> <span class="st">&#39;127.0.0.1&#39;</span>
+                os.environ[<span class="st">&#39;MASTER_PORT&#39;</span>] <span class="op">=</span> <span class="st">&#39;29500&#39;</span>
+                dist.init_process_group(backend, rank<span class="op">=</span>rank, world_size<span class="op">=</span>size)
+                fn(rank, size)
+            
+            
+            <span class="cf">if</span> <span class="va">__name__</span> <span class="op">==</span> <span class="st">&quot;__main__&quot;</span>:
+                size <span class="op">=</span> <span class="dv">2</span>
+                processes <span class="op">=</span> []
+                <span class="cf">for</span> rank <span class="op">in</span> <span class="bu">range</span>(size):
+                    p <span class="op">=</span> Process(target<span class="op">=</span>init_processes, args<span class="op">=</span>(rank, size, run))
+                    p.start()
+                    processes.append(p)
+            
+                <span class="cf">for</span> p <span class="op">in</span> processes:
+                    p.join()</code></pre></div>
+            <p>In the above, the script spawns two processes who will each setup the distributed environment, initialize the process group (<code>dist.init_process_group</code>), and finally execute the given function.</p>
+            <p>The <code>init_processes</code> function is what interests us for now. It ensures that every process will be able to coordinate through a master, using the same ip address and port. Note that we used the TCP backend, but we could have used <a href="https://en.wikipedia.org/wiki/Message_Passing_Interface">MPI</a> or <a href="http://github.com/facebookincubator/gloo">Gloo</a> instead, provided they are installed. We will go over the magic hapening in <code>dist.init_process_group</code> at the end of this tutorial, but it essentially allows processes to communicate with each other by sharing their locations.</p>
+            <h1 id="point-to-point-communication">Point-to-Point Communication</h1>
+            <!--
+            * send/recv
+            * isend/irecv
+            
+            TODO: Animation of send-recv.
+            -->
+            <p>A transfer of data from one process to another is called a point-to-point communication. These are achieved through the <code>send</code> and <code>recv</code> functions or their <em>immediate</em> counter-parts, <code>isend</code> and <code>irecv</code>.</p>
+            <div class="sourceCode"><pre class="sourceCode python"><code class="sourceCode python"><span class="co">&quot;&quot;&quot;Blocking point-to-point communication.&quot;&quot;&quot;</span>
+            
+            <span class="kw">def</span> run(rank, size):
+                tensor <span class="op">=</span> torch.zeros(<span class="dv">1</span>)
+                <span class="cf">if</span> rank <span class="op">==</span> <span class="dv">0</span>:
+                    tensor <span class="op">+=</span> <span class="dv">1</span>
+                    <span class="co"># Send the tensor to process 1</span>
+                    dist.send(tensor<span class="op">=</span>tensor, dst<span class="op">=</span><span class="dv">1</span>)
+                <span class="cf">else</span>:
+                    <span class="co"># Receive tensor from process 0</span>
+                    dist.recv(tensor<span class="op">=</span>tensor, src<span class="op">=</span><span class="dv">0</span>)
+                <span class="bu">print</span>(<span class="st">&#39;Rank &#39;</span>, rank, <span class="st">&#39; has data &#39;</span>, tensor[<span class="dv">0</span>])</code></pre></div>
+            <p>In the above example, both processes start with a zero tensor, then process 0 increments the tensor and sends it to process 1 so that they both end up with 1.0. Notice that process 1 needs to allocate memory in order to store the data it will receive.</p>
+            <p>Also notice that <code>send</code>/<code>recv</code> are <strong>blocking</strong>: both processes stop until the communication is completed. Immediates on the other hand are <strong>non-blocking</strong>, the script continues its execution and the methods return a <code>DistributedRequest</code> object upon which we can choose to <code>wait()</code>.</p>
+            <div class="sourceCode"><pre class="sourceCode python"><code class="sourceCode python"><span class="co">&quot;&quot;&quot;Non-blocking point-to-point communication.&quot;&quot;&quot;</span>
+            
+            <span class="kw">def</span> run(rank, size):
+                tensor <span class="op">=</span> torch.zeros(<span class="dv">1</span>)
+                req <span class="op">=</span> <span class="va">None</span>
+                <span class="cf">if</span> rank <span class="op">==</span> <span class="dv">0</span>:
+                    tensor <span class="op">+=</span> <span class="dv">1</span>
+                    <span class="co"># Send the tensor to process 1</span>
+                    req <span class="op">=</span> dist.isend(tensor<span class="op">=</span>tensor, dst<span class="op">=</span><span class="dv">1</span>)
+                    <span class="bu">print</span>(<span class="st">&#39;Rank 0 started sending&#39;</span>)
+                <span class="cf">else</span>:
+                    <span class="co"># Receive tensor from process 0</span>
+                    req <span class="op">=</span> dist.irecv(tensor<span class="op">=</span>tensor, src<span class="op">=</span><span class="dv">0</span>)
+                    <span class="bu">print</span>(<span class="st">&#39;Rank 1 started receiving&#39;</span>)
+                    <span class="bu">print</span>(<span class="st">&#39;Rank 1 has data &#39;</span>, tensor[<span class="dv">0</span>])
+                req.wait()
+                <span class="bu">print</span>(<span class="st">&#39;Rank &#39;</span>, rank, <span class="st">&#39; has data &#39;</span>, tensor[<span class="dv">0</span>])</code></pre></div>
+            <p>Running the above function a couple of times will sometimes result in process 1 still having 0.0 while having already started receiving. However, after <code>req.wait()</code> has been executed we are guaranteed that the communication took place.</p>
+            <p>Point-to-point communication is useful when we want a fine-grained control over the communication of our processes. They can be used to implement fancy algorithms, such as the one used in <a href="https://github.com/baidu-research/baidu-allreduce">Baidu's DeepSpeech</a> or <a href="https://research.fb.com/publications/imagenet1kin1h/">Facebook's large-scale experiments</a>.</p>
+            <h1 id="collective-communication">Collective Communication</h1>
+            <!--
+            * gather
+            * reduce
+            * broadcast
+            * scatter
+            * all_reduce
+            
+            TODO: Figures for common collectives.
+            -->
+            <p>As opposed to point-to-point communcation, collectives allow for communication patterns across all processes in a <strong>group</strong>. A group is a subset of all your processes. To create a group, we can pass a list of ranks to <code>dist.new_group(group)</code>. By default, collectives are executed on the all processes, also known as the <strong>world</strong>. Then, in order to obtain the sum of all tensors at all processes, we can use the <code>dist.all_reduce(tensor, op, group)</code> collective.</p>
+            <div class="sourceCode"><pre class="sourceCode python"><code class="sourceCode python"><span class="co">&quot;&quot;&quot; All-Reduce example.&quot;&quot;&quot;</span>
+            <span class="kw">def</span> run(rank, size):
+                <span class="co">&quot;&quot;&quot; Simple point-to-point communication. &quot;&quot;&quot;</span>
+                group <span class="op">=</span> dist.new_group([<span class="dv">0</span>, <span class="dv">1</span>]) 
+                tensor <span class="op">=</span> torch.ones(<span class="dv">1</span>)
+                dist.all_reduce(tensor, op<span class="op">=</span>dist.reduce_op.SUM, group<span class="op">=</span>group)
+                <span class="bu">print</span>(<span class="st">&#39;Rank &#39;</span>, rank, <span class="st">&#39; has data &#39;</span>, tensor[<span class="dv">0</span>])</code></pre></div>
+            <p>Since we wanted the sum of all tensors in the group, we used <code>dist.reduce_op.SUM</code> as the reduce operator. Generally speaking, any commutative mathematical operation can be used as an operator. PyTorch comes with 4 out-of-the-box, all working at the element-wise level:</p>
+            <ul>
+            <li><code>dist.reduce_op.SUM</code>,</li>
+            <li><code>dist.reduce_op.PRODUCT</code>,</li>
+            <li><code>dist.reduce_op.MAX</code>,</li>
+            <li><code>dist.reduce_op.MIN</code>.</li>
+            </ul>
+            <p>In addition to <code>dist.all_reduce(tensor, op, group)</code>, there are a total of 4 collectives that are currently implemented in PyTorch.</p>
+            <ul>
+            <li><code>dist.broadcast(tensor, src, group)</code>: Copies tensor from src to all other processes.</li>
+            <li><code>dist.reduce(tensor, dst, op, group)</code>: Applies op to all tensor and stores the result at dst.</li>
+            <li><code>dist.all_reduce(tensor, op, group)</code>: Same as reduce, but the result is stored at all processes.</li>
+            <li><code>dist.all_gather(tensor_list, tensor, group)</code>: Copies tensor from all processes to tensor_list, on all processes.</li>
+            </ul>
+            <h3 id="what-about-scatter-and-gather">What about scatter and gather ?</h3>
+            <p>Those familiar with MPI will have noticed that the gather and scatter methods are absent from the current API. However, PyTorch exposes</p>
+            <ul>
+            <li><code>dist.scatter_send(tensor_list, tensor, group)</code>,</li>
+            <li><code>dist.scatter_recv(tensor, dst, group)</code>,</li>
+            <li><code>dist.gather_send(tensor_list, tensor, group)</code>, and</li>
+            <li><code>dist.gather_recv(tensor, dst, group)</code></li>
+            </ul>
+            <p>which can be used to implement the standard scatter and gather behaviours.</p>
+            <div class="sourceCode"><pre class="sourceCode python"><code class="sourceCode python"><span class="co">&quot;&quot;&quot; Custom scatter and gather implementation. &quot;&quot;&quot;</span>
+            
+            <span class="kw">def</span> scatter(tensor, rank, tensor_list<span class="op">=</span><span class="va">None</span>, root<span class="op">=</span><span class="dv">0</span>, group<span class="op">=</span><span class="va">None</span>):
+                <span class="co">&quot;&quot;&quot;</span>
+            <span class="co">        Sends the ith tensor in tensor_list on root to the ith process.</span>
+            <span class="co">    &quot;&quot;&quot;</span>
+                <span class="cf">if</span> group <span class="op">is</span> <span class="va">None</span>:
+                    group <span class="op">=</span> dist.group.WORLD
+                <span class="cf">if</span> rank <span class="op">==</span> root:
+                    <span class="cf">assert</span>(tensor_list <span class="op">is</span> <span class="op">not</span> <span class="va">None</span>)
+                    dist.scatter_send(tensor_list, tensor, group)
+                <span class="cf">else</span>:
+                    dist.scatter_recv(tensor, root, group)
+            
+            
+            <span class="kw">def</span> gather(tensor, rank, tensor_list<span class="op">=</span><span class="va">None</span>, root<span class="op">=</span><span class="dv">0</span>, group<span class="op">=</span><span class="va">None</span>):
+                <span class="co">&quot;&quot;&quot;</span>
+            <span class="co">        Sends tensor to root process, which store it in tensor_list.</span>
+            <span class="co">    &quot;&quot;&quot;</span>
+                <span class="cf">if</span> group <span class="op">is</span> <span class="va">None</span>:
+                    group <span class="op">=</span> dist.group.WORLD
+                <span class="cf">if</span> rank <span class="op">==</span> root:
+                    <span class="cf">assert</span>(tensor_list <span class="op">is</span> <span class="op">not</span> <span class="va">None</span>)
+                    dist.gather_recv(tensor_list, tensor, group)
+                <span class="cf">else</span>:
+                    dist.gather_send(tensor, root, group)</code></pre></div>
+            <h1 id="distributed-training">Distributed Training</h1>
+            <ul>
+            <li>Gloo Backend</li>
+            <li>Simple all_reduce on the gradients</li>
+            <li>Point to optimized DistributedDataParallel</li>
+            </ul>
+            <h1 id="internals">Internals</h1>
+            <ul>
+            <li>The magic behind init_process_group</li>
+            </ul>
+            <h3 id="acknowledgements">Acknowledgements</h3>
+            <ul>
+            <li>PyTorch docs + well written tests.</li>
+            </ul>
+            <h3 id="questions">Questions</h3>
+            <ul>
+            <li>Why scatter_send/recv and gather_send/recv ? And why no gather() / scatter() ?</li>
+            <li>How to install gloo ?</li>
+            </ul>
+            
+            <footer class="footer">
+                <p><b>Writing Distributed Applications with PyTorch</b> - <i>Sebastien Arnold</i>, June 14, 2017.</p>
+            </footer>
+
+        </div> <!-- /container -->
+
+        <!-- jQuery (necessary for Bootstrap's JavaScript plugins) -->
+        <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.12.4/jquery.min.js"></script>
+        <!-- Include all compiled plugins (below), or include individual files as needed -->
+        <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/3.3.7/js/bootstrap.min.js"></script>
+
+        <!--Prism for code highlighting-->
+        <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.5.1/prism.js"></script>
+        <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.5.1/components/prism-python.min.js"></script>
+        <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.5.1/components/prism-c.min.js"></script>
+        <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.5.1/components/prism-java.min.js"></script>
+
+        <!--MathJax-->
+        <script type="text/x-mathjax-config">
+        var delim = '\u0024';
+        MathJax.Hub.Config({
+          tex2jax: {inlineMath: [[delim, delim], ['\\(','\\)']]}
+        });
+        </script>
+        <script src='https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML'></script>
+
+        <!--KaTeX JavaScript-->
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.6.0/katex.min.js"></script>
+        <!--<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.6.0/contrib/auto-render.min.js"></script>-->
+
+        <!--Pseudocode.js-->
+        <script src="https://cdn.rawgit.com/seba-1511/cdn/master/pseudocode.js/pseudocode.min.js"></script>
+        <!--<script src="https://rawgit.com/seba-1511/cdn/master/pseudocode.js/pseudocode.min.js"></script>-->
+
+        <!--Custom scripting-->
+        <script type="text/javascript">
+        // Allows prism to work properly
+        jQuery(document).ready(function() {
+            jQuery('.python').addClass('language-python').removeClass('python');
+            jQuery('.javascript').addClass('language-js').removeClass('javascript');
+            jQuery('.c').addClass('language-c').removeClass('c');
+            jQuery('.java').addClass('language-java').removeClass('java');
+            jQuery('.sourceCode').removeClass('sourceCode');
+            jQuery('table').addClass('table table-striped table-bordered');
+            jQuery('img').addClass('img-responsive');
+            // renderMathInElement(document.body, {
+            //     displayMode: false,
+            //     throwOnError: false,
+            //     errorColor: '#cc0000',
+            // });
+
+            var math = document.getElementsByClassName("math");
+            // MathJax.Hub.Queue(["Typeset", MathJax.Hub, math]);
+            MathJax.Hub.Queue([math, ]);
+            Prism.highlightAll(false);
+
+            // The following uses pseudocode.js to render algorithms
+            var i, content, container;
+            var pseudocodeElems = document.querySelectorAll('pre.algo code');
+            var parents = document.querySelectorAll('pre.algo');
+            var displayOptions = {
+                indentSize: '1.5em',
+                commentDelimiter: '//',
+                lineNumber: true,
+                lineNumberPunc: ':',
+                noEnd: true,
+                captionCount: 1,
+                throwOnError: false,
+            };
+            for (i=0; i < pseudocodeElems.length; i++) {
+                content = pseudocodeElems[i].textContent;
+                container = document.createElement('div');
+                parents[i].parentNode.insertBefore(container, parents[i]);
+                pseudocode.render(content, container, displayOptions);
+                parents[i].style.display = 'none';
+                parents[i].parentNode.removeChild(parents[i]);
+            }
+        });
+        </script>
+        <script>
+          (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+          (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+          m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+          })(window,document,'script','https://www.google-analytics.com/analytics.js','ga');
+          ga('create', 'UA-68693545-3', 'auto');
+          ga('send', 'pageview');
+        </script>
+
+    </body>
+</html>
