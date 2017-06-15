@@ -59,8 +59,22 @@ The `init_processes` function is what interests us for now. It ensures that ever
 * send/recv
 * isend/irecv
 
-TODO: Animation of send-recv.
 -->
+
+<table>
+<tbody>
+<tr>
+
+</tr><tr>
+<td align='center'>
+<img src='./figs/send_recv.png' width=100% /><br/>
+<b>Send and Recv</b>
+</td>
+
+</tr>
+</tbody>
+</table>
+
 
 A transfer of data from one process to another is called a point-to-point communication. These are achieved through the `send` and `recv` functions or their *immediate* counter-parts, `isend` and `irecv`.
 
@@ -117,10 +131,8 @@ Point-to-point communication is useful when we want a fine-grained control over 
 * scatter
 * all_reduce
 
-TODO: Figures for common collectives.
 -->
 
-<!--<table style="max-width:900px;width:900px;margin-right:200px">-->
 <table>
 <tbody>
 <tr>
@@ -178,6 +190,26 @@ In addition to `dist.all_reduce(tensor, op, group)`, there are a total of 4 coll
 * `dist.all_gather(tensor_list, tensor, group)`: Copies tensor from all processes to tensor_list, on all processes.
 
 ### What about scatter and gather ?
+
+<table>
+<tbody>
+<tr>
+
+</tr><tr>
+
+<td align='center'>
+<img src='./figs/scatter.png' width=100% /><br/>
+<b>Scatter</b>
+</td>
+
+<td align='center'>
+<img src='./figs/gather.png' width=100% /><br/>
+<b>Gather</b>
+</td>
+
+</tr>
+</tbody>
+</table>
 
 Those familiar with MPI will have noticed that the gather and scatter methods are absent from the current API. However, PyTorch exposes 
 

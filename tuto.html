@@ -185,8 +185,18 @@
             * send/recv
             * isend/irecv
             
-            TODO: Animation of send-recv.
             -->
+            <table>
+            <tbody>
+            <tr>
+            </tr>
+            <tr>
+            <td align="center">
+            <img src='./figs/send_recv.png' width=100% /><br/> <b>Send and Recv</b>
+            </td>
+            </tr>
+            </tbody>
+            </table>
             <p>A transfer of data from one process to another is called a point-to-point communication. These are achieved through the <code>send</code> and <code>recv</code> functions or their <em>immediate</em> counter-parts, <code>isend</code> and <code>irecv</code>.</p>
             <div class="sourceCode"><pre class="sourceCode python"><code class="sourceCode python"><span class="co">&quot;&quot;&quot;Blocking point-to-point communication.&quot;&quot;&quot;</span>
             
@@ -229,9 +239,7 @@
             * scatter
             * all_reduce
             
-            TODO: Figures for common collectives.
             -->
-            <!--<table style="max-width:900px;width:900px;margin-right:200px">-->
             <table>
             <tbody>
             <tr>
@@ -275,6 +283,20 @@
             <li><code>dist.all_gather(tensor_list, tensor, group)</code>: Copies tensor from all processes to tensor_list, on all processes.</li>
             </ul>
             <h3 id="what-about-scatter-and-gather">What about scatter and gather ?</h3>
+            <table>
+            <tbody>
+            <tr>
+            </tr>
+            <tr>
+            <td align="center">
+            <img src='./figs/scatter.png' width=100% /><br/> <b>Scatter</b>
+            </td>
+            <td align="center">
+            <img src='./figs/gather.png' width=100% /><br/> <b>Gather</b>
+            </td>
+            </tr>
+            </tbody>
+            </table>
             <p>Those familiar with MPI will have noticed that the gather and scatter methods are absent from the current API. However, PyTorch exposes</p>
             <ul>
             <li><code>dist.scatter_send(tensor_list, tensor, group)</code>,</li>
