@@ -223,10 +223,11 @@ which can be used to implement the standard scatter and gather behaviours.
 ```python
 """ Custom scatter and gather implementation. """
 
-def scatter(tensor, rank, tensor_list=None, root=0, group=None):
+def scatter(tensor, tensor_list=None, root=0, group=None):
     """
         Sends the ith tensor in tensor_list on root to the ith process.
     """
+    rank = dist.get_rank()
     if group is None:
         group = dist.group.WORLD
     if rank == root:
@@ -236,10 +237,11 @@ def scatter(tensor, rank, tensor_list=None, root=0, group=None):
         dist.scatter_recv(tensor, root, group)
 
 
-def gather(tensor, rank, tensor_list=None, root=0, group=None):
+def gather(tensor, tensor_list=None, root=0, group=None):
     """
         Sends tensor to root process, which store it in tensor_list.
     """
+    rank = dist.get_rank()
     if group is None:
         group = dist.group.WORLD
     if rank == root:

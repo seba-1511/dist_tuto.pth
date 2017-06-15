@@ -307,10 +307,11 @@
             <p>which can be used to implement the standard scatter and gather behaviours.</p>
             <div class="sourceCode"><pre class="sourceCode python"><code class="sourceCode python"><span class="co">&quot;&quot;&quot; Custom scatter and gather implementation. &quot;&quot;&quot;</span>
             
-            <span class="kw">def</span> scatter(tensor, rank, tensor_list<span class="op">=</span><span class="va">None</span>, root<span class="op">=</span><span class="dv">0</span>, group<span class="op">=</span><span class="va">None</span>):
+            <span class="kw">def</span> scatter(tensor, tensor_list<span class="op">=</span><span class="va">None</span>, root<span class="op">=</span><span class="dv">0</span>, group<span class="op">=</span><span class="va">None</span>):
                 <span class="co">&quot;&quot;&quot;</span>
             <span class="co">        Sends the ith tensor in tensor_list on root to the ith process.</span>
             <span class="co">    &quot;&quot;&quot;</span>
+                rank <span class="op">=</span> dist.get_rank()
                 <span class="cf">if</span> group <span class="op">is</span> <span class="va">None</span>:
                     group <span class="op">=</span> dist.group.WORLD
                 <span class="cf">if</span> rank <span class="op">==</span> root:
@@ -320,10 +321,11 @@
                     dist.scatter_recv(tensor, root, group)
             
             
-            <span class="kw">def</span> gather(tensor, rank, tensor_list<span class="op">=</span><span class="va">None</span>, root<span class="op">=</span><span class="dv">0</span>, group<span class="op">=</span><span class="va">None</span>):
+            <span class="kw">def</span> gather(tensor, tensor_list<span class="op">=</span><span class="va">None</span>, root<span class="op">=</span><span class="dv">0</span>, group<span class="op">=</span><span class="va">None</span>):
                 <span class="co">&quot;&quot;&quot;</span>
             <span class="co">        Sends tensor to root process, which store it in tensor_list.</span>
             <span class="co">    &quot;&quot;&quot;</span>
+                rank <span class="op">=</span> dist.get_rank()
                 <span class="cf">if</span> group <span class="op">is</span> <span class="va">None</span>:
                     group <span class="op">=</span> dist.group.WORLD
                 <span class="cf">if</span> rank <span class="op">==</span> root:

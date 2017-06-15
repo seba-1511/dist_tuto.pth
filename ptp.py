@@ -20,6 +20,7 @@ def gather(tensor, rank, tensor_list=None, root=0, group=None):
 
 def run(rank, size):
         """ Simple point-to-point communication. """
+        print(dist.get_rank())
         tensor = torch.ones(1)
         tensor_list = [torch.zeros(1) for _ in range(size)]
         gather(tensor, rank, tensor_list, 0)
