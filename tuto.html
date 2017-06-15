@@ -231,6 +231,27 @@
             
             TODO: Figures for common collectives.
             -->
+            <!--<table style="max-width:900px;width:900px;margin-right:200px">-->
+            <table>
+            <tbody>
+            <tr>
+            <td align="center">
+            <img src='./figs/scatter.png' width=100% /><br/> <b>Broadcast</b>
+            </td>
+            <td align="center">
+            <img src='./figs/all_gather.png' width=100% /><br/> <b>AllGather</b>
+            </td>
+            </tr>
+            <tr>
+            <td align="center">
+            <img src='./figs/reduce.png' width=100% /><br/> <b>Reduce</b>
+            </td>
+            <td align="center">
+            <img src='./figs/all_reduce.png' width=100% /><br/> <b>AllReduce</b>
+            </td>
+            </tr>
+            </tbody>
+            </table>
             <p>As opposed to point-to-point communcation, collectives allow for communication patterns across all processes in a <strong>group</strong>. A group is a subset of all your processes. To create a group, we can pass a list of ranks to <code>dist.new_group(group)</code>. By default, collectives are executed on the all processes, also known as the <strong>world</strong>. Then, in order to obtain the sum of all tensors at all processes, we can use the <code>dist.all_reduce(tensor, op, group)</code> collective.</p>
             <div class="sourceCode"><pre class="sourceCode python"><code class="sourceCode python"><span class="co">&quot;&quot;&quot; All-Reduce example.&quot;&quot;&quot;</span>
             <span class="kw">def</span> run(rank, size):
@@ -305,7 +326,7 @@
             <h3 id="questions">Questions</h3>
             <ul>
             <li>Why scatter_send/recv and gather_send/recv ? And why no gather() / scatter() ?</li>
-            <li>How to install gloo ?</li>
+            <li>How to get started with gloo ? Does it support ptp ?</li>
             </ul>
             
             <footer class="footer">
@@ -332,7 +353,7 @@
           tex2jax: {inlineMath: [[delim, delim], ['\\(','\\)']]}
         });
         </script>
-        <script src='https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML'></script>
+        <script src='https://cdn.rawgit.com/mathjax/MathJax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML'></script>
 
         <!--KaTeX JavaScript-->
         <script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.6.0/katex.min.js"></script>

@@ -120,6 +120,37 @@ Point-to-point communication is useful when we want a fine-grained control over 
 TODO: Figures for common collectives.
 -->
 
+<!--<table style="max-width:900px;width:900px;margin-right:200px">-->
+<table>
+<tbody>
+<tr>
+
+<td align='center'>
+<img src='./figs/scatter.png' width=100% /><br/>
+<b>Broadcast</b>
+</td>
+
+<td align='center'>
+<img src='./figs/all_gather.png' width=100% /><br/>
+<b>AllGather</b>
+</td>
+
+</tr><tr>
+
+<td align='center'>
+<img src='./figs/reduce.png' width=100% /><br/>
+<b>Reduce</b>
+</td>
+
+<td align='center'>
+<img src='./figs/all_reduce.png' width=100% /><br/>
+<b>AllReduce</b>
+</td>
+
+</tr>
+</tbody>
+</table>
+
 As opposed to point-to-point communcation, collectives allow for communication patterns across all processes in a **group**. A group is a subset of all your processes. To create a group, we can pass a list of ranks to `dist.new_group(group)`. By default, collectives are executed on the all processes, also known as the **world**. Then, in order to obtain the sum of all tensors at all processes, we can use the `dist.all_reduce(tensor, op, group)` collective.
 
 ```python
@@ -205,4 +236,4 @@ def gather(tensor, rank, tensor_list=None, root=0, group=None):
 ### Questions
 
 * Why scatter_send/recv and gather_send/recv ? And why no gather() / scatter() ?
-* How to install gloo ?
+* How to get started with gloo ? Does it support ptp ?
