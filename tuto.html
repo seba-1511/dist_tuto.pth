@@ -179,7 +179,7 @@
                 <span class="cf">for</span> p <span class="op">in</span> processes:
                     p.join()</code></pre></div>
             <p>In the above, the script spawns two processes who will each setup the distributed environment, initialize the process group (<code>dist.init_process_group</code>), and finally execute the given function.</p>
-            <p>The <code>init_processes</code> function is what interests us for now. It ensures that every process will be able to coordinate through a master, using the same ip address and port. Note that we used the TCP backend, but we could have used <a href="https://en.wikipedia.org/wiki/Message_Passing_Interface">MPI</a> or <a href="http://github.com/facebookincubator/gloo">Gloo</a> instead, provided they are installed. We will go over the magic hapening in <code>dist.init_process_group</code> at the end of this tutorial, but it essentially allows processes to communicate with each other by sharing their locations.</p>
+            <p>The <code>init_processes</code> function is what interests us for now. It ensures that every process will be able to coordinate through a master, using the same ip address and port. Note that we used the TCP backend, but we could have used <a href="https://en.wikipedia.org/wiki/Message_Passing_Interface">MPI</a> or <a href="http://github.com/facebookincubator/gloo">Gloo</a> instead, provided they are installed. We will go over the magic happening in <code>dist.init_process_group</code> at the end of this tutorial, but it essentially allows processes to communicate with each other by sharing their locations.</p>
             <h1 id="point-to-point-communication">Point-to-Point Communication</h1>
             <!--
             * send/recv

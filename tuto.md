@@ -52,7 +52,7 @@ if __name__ == "__main__":
 
 In the above, the script spawns two processes who will each setup the distributed environment, initialize the process group (`dist.init_process_group`), and finally execute the given function. 
 
-The `init_processes` function is what interests us for now. It ensures that every process will be able to coordinate through a master, using the same ip address and port. Note that we used the TCP backend, but we could have used [MPI](https://en.wikipedia.org/wiki/Message_Passing_Interface) or [Gloo](http://github.com/facebookincubator/gloo) instead, provided they are installed. We will go over the magic hapening in `dist.init_process_group` at the end of this tutorial, but it essentially allows processes to communicate with each other by sharing their locations.
+The `init_processes` function is what interests us for now. It ensures that every process will be able to coordinate through a master, using the same ip address and port. Note that we used the TCP backend, but we could have used [MPI](https://en.wikipedia.org/wiki/Message_Passing_Interface) or [Gloo](http://github.com/facebookincubator/gloo) instead, provided they are installed. We will go over the magic happening in `dist.init_process_group` at the end of this tutorial, but it essentially allows processes to communicate with each other by sharing their locations.
 
 # Point-to-Point Communication
 <!--
