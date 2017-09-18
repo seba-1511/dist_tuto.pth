@@ -15,6 +15,7 @@ from torchvision import datasets, transforms
 
 
 class Partition(object):
+    """ Dataset-like object, but only access a subset of it. """
 
     def __init__(self, data, index):
         self.data = data
@@ -69,6 +70,23 @@ class Net(nn.Module):
         x = self.fc2(x)
         return F.log_softmax(x)
 
+def partition_dataset():
+    """ Partitioning MNIST """
+    dataset = datasets.MNIST('./data', train=True, download=True,
+                             transform=transforms.Compose([
+                                 transforms.ToTensor(),
+                                 transforms.Normalize((0.1307,), (0.3081,))
+                             ]))
+    size = dist.get_world_size()
+    bsz = 128 / float(size)
+    partition_sizes = [1.0 / size for _ in range(size)]
+    partition = DataPartitioner(dataset, partition_sizes)
+    partition = partition.use(dist.get_rank())
+    train_set = torch.utils.data.DataLoader(partition,
+                                         batch_size=bsz,
+                                         shuffle=True)
+    return train_set, bsz
+
 
 def average_gradients(model):
     """ Gradient averaging. """
@@ -80,24 +98,12 @@ def average_gradients(model):
 def run(rank, size):
         """ Distributed Synchronous SGD Example """
         torch.manual_seed(1234)
-        dataset = datasets.MNIST('./data', train=True, download=True,
-                                 transform=transforms.Compose([
-                                     transforms.ToTensor(),
-                                     transforms.Normalize((0.1307,), (0.3081,))
-                                 ]))
-        size = dist.get_world_size()
-        bsz = 128 / float(size)
-        partition_sizes = [1.0 / size for _ in range(size)]
-        partition = DataPartitioner(dataset, partition_sizes)
-        partition = partition.use(dist.get_rank())
-        train_set = torch.utils.data.DataLoader(partition,
-                                             batch_size=bsz,
-                                             shuffle=True)
+        train_set, bsz = partition_dataset()
         model = Net()
         optimizer = optim.SGD(model.parameters(),
                               lr=0.01, momentum=0.5)
 
-        num_batches = ceil(len(partition) / float(bsz)) 
+        num_batches = ceil(len(train_set.dataset) / float(bsz)) 
         for epoch in range(10):
             epoch_loss = 0.0
             for data, target in train_set:

@@ -1,5 +1,5 @@
-% Writing Distributed Applications wib PyTorch
-% Sebastien Arnold
+% Writing Distributed Applications with PyTorch
+% Séb Arnold
 % June 14, 2017
 
 \begin{abstract}
@@ -18,7 +18,6 @@ In order to get started we should thus be able to run multiple processes simulta
 
 ```python
 """run.py:"""
-    
 #!/usr/bin/env python
 import os
 import torch
@@ -58,7 +57,6 @@ The `init_processes` function is what interests us for now. It ensures that ever
 <!--
 * send/recv
 * isend/irecv
-
 -->
 
 <table>
@@ -130,7 +128,6 @@ Point-to-point communication is useful when we want a fine-grained control over 
 * broadcast
 * scatter
 * all_reduce
-
 -->
 
 <table>
@@ -160,6 +157,19 @@ Point-to-point communication is useful when we want a fine-grained control over 
 </td>
 
 </tr>
+<tr>
+
+<td align='center'>
+<img src='./figs/scatter.png' width=100% /><br/>
+<b>Scatter</b>
+</td>
+
+<td align='center'>
+<img src='./figs/gather.png' width=100% /><br/>
+<b>Gather</b>
+</td>
+
+</tr>
 </tbody>
 </table>
 
@@ -182,84 +192,158 @@ Since we wanted the sum of all tensors in the group, we used `dist.reduce_op.SUM
 * `dist.reduce_op.MAX`,
 * `dist.reduce_op.MIN`.
 
-In addition to `dist.all_reduce(tensor, op, group)`, there are a total of 4 collectives that are currently implemented in PyTorch.
+In addition to `dist.all_reduce(tensor, op, group)`, there are a total of 6 collectives that are currently implemented in PyTorch.
 
 * `dist.broadcast(tensor, src, group)`: Copies tensor from src to all other processes.
 * `dist.reduce(tensor, dst, op, group)`: Applies op to all tensor and stores the result at dst.
 * `dist.all_reduce(tensor, op, group)`: Same as reduce, but the result is stored at all processes.
+* `dist.scatter(tensor, src, scatter_list, group)`: Copies `scatter_list[i]` to the $i^{\text{th}}$ process.
+* `dist.gather(tensor, dst, gather_list, group)`: Copies tensor from all processes to dst.
 * `dist.all_gather(tensor_list, tensor, group)`: Copies tensor from all processes to tensor_list, on all processes.
-
-### What about scatter and gather ?
-
-<table>
-<tbody>
-<tr>
-
-</tr><tr>
-
-<td align='center'>
-<img src='./figs/scatter.png' width=100% /><br/>
-<b>Scatter</b>
-</td>
-
-<td align='center'>
-<img src='./figs/gather.png' width=100% /><br/>
-<b>Gather</b>
-</td>
-
-</tr>
-</tbody>
-</table>
-
-Those familiar with MPI will have noticed that the gather and scatter methods are absent from the current API. However, PyTorch exposes 
-
-* `dist.scatter_send(tensor_list, tensor, group)`,
-* `dist.scatter_recv(tensor, dst, group)`,
-* `dist.gather_send(tensor_list, tensor, group)`, and
-* `dist.gather_recv(tensor, dst, group)`
-
-which can be used to implement the standard scatter and gather behaviours.
-
-```python
-""" Custom scatter and gather implementation. """
-
-def scatter(tensor, tensor_list=None, root=0, group=None):
-    """
-        Sends the ith tensor in tensor_list on root to the ith process.
-    """
-    rank = dist.get_rank()
-    if group is None:
-        group = dist.group.WORLD
-    if rank == root:
-        assert(tensor_list is not None)
-        dist.scatter_send(tensor_list, tensor, group)
-    else:
-        dist.scatter_recv(tensor, root, group)
-
-
-def gather(tensor, tensor_list=None, root=0, group=None):
-    """
-        Sends tensor to root process, which store it in tensor_list.
-    """
-    rank = dist.get_rank()
-    if group is None:
-        group = dist.group.WORLD
-    if rank == root:
-        assert(tensor_list is not None)
-        dist.gather_recv(tensor_list, tensor, group)
-    else:
-        dist.gather_send(tensor, root, group)
-
-```
-
 
 # Distributed Training
 
+<!--
 * Gloo Backend
 * Simple all_reduce on the gradients
 * Point to optimized DistributedDataParallel
+-->
 
-# Internals
+**Note:** You can find the full script of this example [here](https://github.com/seba-1511/dist_tuto.pth/blob/gh-pages/train_dist.py).
+
+Now that we understand how the distributed module works, let us write something useful with it. Our goal will be to replicate the functionality of [DistributedDataParallel](http://pytorch.org/docs/master/nn.html#torch.nn.parallel.DistributedDataParallel). Of course, this will be a didactic example and in a real-world situtation you should use the official, well-tested and well-optimized version linked above.
+
+Quite simply we want to implement a distributed version of stochastic gradient descent. Our script will let all processes compute the gradients of their model on their batch of data and then average their gradients. In order to ensure replicability across runs, we will first have to partition our dataset. (You could also use [tnt.dataset.SplitDataset](https://github.com/pytorch/tnt/blob/master/torchnet/dataset/splitdataset.py#L4)])
+
+~~~python
+""" Dataset partitioning helper """
+class Partition(object):
+
+    def __init__(self, data, index):
+        self.data = data
+        self.index = index
+
+    def __len__(self):
+        return len(self.index)
+
+    def __getitem__(self, index):
+        data_idx = self.index[index]
+        return self.data[data_idx]
+
+
+class DataPartitioner(object):
+
+    def __init__(self, data, sizes=[0.7, 0.2, 0.1], seed=1234):
+        self.data = data
+        self.partitions = []
+        rng = Random()
+        rng.seed(seed)
+        data_len = len(data)
+        indexes = [x for x in range(0, data_len)]
+        rng.shuffle(indexes)
+
+        for frac in sizes:
+            part_len = int(frac * data_len)
+            self.partitions.append(indexes[0:part_len])
+            indexes = indexes[part_len:]
+
+    def use(self, partition):
+        return Partition(self.data, self.partitions[partition])
+~~~
+
+With the above snippet, we can now simply partition any dataset using the following few lines:
+
+~~~python
+""" Partitioning MNIST """
+def partition_dataset():
+    dataset = datasets.MNIST('./data', train=True, download=True,
+                             transform=transforms.Compose([
+                                 transforms.ToTensor(),
+                                 transforms.Normalize((0.1307,), (0.3081,))
+                             ]))
+    size = dist.get_world_size()
+    bsz = 128 / float(size)
+    partition_sizes = [1.0 / size for _ in range(size)]
+    partition = DataPartitioner(dataset, partition_sizes)
+    partition = partition.use(dist.get_rank())
+    train_set = torch.utils.data.DataLoader(partition,
+                                         batch_size=bsz,
+                                         shuffle=True)
+    return train_set, bsz
+~~~
+
+Assuming that we have 2 replicas, then each process will have a `train_set` of 60000 / 2 = 30000 samples. We also divide the batch size by the number of replicas in order to maintain the overall batch size of 128.
+
+We can now write our usual forward-backward-optimize training code, and include a method to average the gradients of our models. (The following is largely inspired from the official [PyTorch MNIST example](https://github.com/pytorch/examples/blob/master/mnist/main.py).)
+
+~~~python
+""" Distributed Synchronous SGD Example """
+def run(rank, size):
+        torch.manual_seed(1234)
+        train_set, bsz = partition_dataset()
+        model = Net()
+        optimizer = optim.SGD(model.parameters(),
+                              lr=0.01, momentum=0.5)
+
+        num_batches = ceil(len(train_set.dataset) / float(bsz)) 
+        for epoch in range(10):
+            epoch_loss = 0.0
+            for data, target in train_set:
+                data, target = Variable(data), Variable(target)
+                optimizer.zero_grad()
+                output = model(data)
+                loss = F.nll_loss(output, target)
+                epoch_loss += loss.data[0]
+                loss.backward()
+                average_gradients(model)
+                optimizer.step()
+            print('Rank ', dist.get_rank(), ', epoch ',
+                  epoch, ': ', epoch_loss / num_batches) 
+~~~
+
+It remains to implement the `average_gradients(model)` function, which simply takes in a model and averages its gradients across the group.
+
+~~~python
+""" Gradient averaging. """
+def average_gradients(model):
+    size = float(dist.get_world_size())
+    for param in model.parameters():
+        dist.all_reduce(param.grad.data, op=dist.reduce_op.SUM, group=0)
+        param.grad.data /= size 
+~~~
+
+*Et voilà *! We successfully implemented distributed synchronous SGD and could train any model on a large computer cluster.
+
+**Note:**
+While the last sentence is *technically* true, there are [a lot more tricks](http://seba-1511.github.io/dist_blog) required to implement a production-level implementation of synchronous SGD. Again, use what [has been tested](http://pytorch.org/docs/master/nn.html#torch.nn.parallel.DistributedDataParallel). 
+
+# Advanced Topics
+
+We are now ready to discover some of the more advanced functionalities of `torch.distributed`. Since there is a lot to cover, this section is divided into three subsections:
+
+1. Communication Backends: where we learn how to use MPI and Gloo for GPU-GPU communication.
+2. Initialization Methods: where we understand how to best setup the initial coordination phase in `dist.init_process_group()`.
+3. Internals: where we take a look at what is happening under the hood.
+
+## Communication Backends
+
+One of the most elegant aspects of `torch.distributed` is its ability to use different backends. As mentioned before, there are currently three backends implemented in PyTorch: TCP, MPI, and Gloo. They all support different functions, depending on whether you use CPUs or GPUs. A comparative table can be found [here](http://pytorch.org/docs/master/distributed.html#module-torch.distributed).
+
+### TCP Backend
+
+### Gloo Backend
+
+### MPI Backend
+
+## Initialization Methods
+
+### Environment Variable
+
+### TCP Init & Multicast
+
+### Shared File System
+
+## Internals
 * The magic behind init_process_group:
 
 1. validate and parse the arguments

@@ -20,10 +20,10 @@ def gather(tensor, rank, tensor_list=None, root=0, group=None):
 
 def run(rank, size):
         """ Simple point-to-point communication. """
-        print(dist.get_rank())
+        print(dist.get_world_size())
         tensor = torch.ones(1)
         tensor_list = [torch.zeros(1) for _ in range(size)]
-        gather(tensor, rank, tensor_list, 0)
+        dist.gather(tensor, dst=0, gather_list=tensor_list, group=0)
 
         print('Rank ', rank, ' has data ', sum(tensor_list)[0])
 

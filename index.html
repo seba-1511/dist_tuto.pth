@@ -5,7 +5,7 @@
         <meta http-equiv="X-UA-Compatible" content="IE=edge">
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <!-- The above 3 meta tags *must* come first in the head; any other head content must come *after* these tags -->
-        <title>Writing Distributed Applications wib PyTorch - Sebastien Arnold</title>
+        <title>Writing Distributed Applications with PyTorch - Séb Arnold</title>
 
         <!-- Bootstrap -->
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/3.3.7/css/bootstrap.min.css" />
@@ -133,8 +133,8 @@
                 <!--</ul>-->
                 <!--</nav>-->
 
-                                <h1 class="text-center">Writing Distributed Applications wib PyTorch</h1>
-                <h4 class="text-sm text-muted text-center"> by Sebastien Arnold,  <span style="font-weight:normal;"><i>June 14, 2017</i></span></h4>
+                                <h1 class="text-center">Writing Distributed Applications with PyTorch</h1>
+                <h4 class="text-sm text-muted text-center"> by Séb Arnold,  <span style="font-weight:normal;"><i>June 14, 2017</i></span></h4>
                             </div>
 
                         <div style="margin-top:20px;margin-bottom:20px;"><p><p style="text-align:center;margin:0px;"><b>Abstract</b><p><br/>
@@ -149,7 +149,6 @@
             <p>The distributed package included in PyTorch (i.e., <code>torch.distributed</code>) enables researchers and practitioners to easily distribute their computations across processes and clusters of machines. To do so, it leverages the messaging passing semantics allowing each process to communicate data to any of the other processes. As opposed to the multiprocessing (<code>torch.multiprocessing</code>) package, processes can use different communication backends and are not restricted to being executed on the same machine.</p>
             <p>In order to get started we should thus be able to run multiple processes simultaneously. If you have access to compute cluster you should check with your local sysadmin or use your favorite coordination tool. (e.g., <a href="https://linux.die.net/man/1/pdsh">pdsh</a>, <a href="http://cea-hpc.github.io/clustershell/">clustershell</a>, or <a href="https://slurm.schedmd.com/">others</a>) For the purpose of this tutorial, we will use a single machine and can fork multiple processes using the following template.</p>
             <div class="sourceCode"><pre class="sourceCode python"><code class="sourceCode python"><span class="co">&quot;&quot;&quot;run.py:&quot;&quot;&quot;</span>
-                
             <span class="co">#!/usr/bin/env python</span>
             <span class="im">import</span> os
             <span class="im">import</span> torch
@@ -171,12 +170,12 @@
             <span class="cf">if</span> <span class="va">__name__</span> <span class="op">==</span> <span class="st">&quot;__main__&quot;</span>:
                 size <span class="op">=</span> <span class="dv">2</span>
                 processes <span class="op">=</span> []
-                <span class="cf">for</span> rank <span class="op">in</span> <span class="bu">range</span>(size):
+                <span class="cf">for</span> rank <span class="kw">in</span> <span class="bu">range</span>(size):
                     p <span class="op">=</span> Process(target<span class="op">=</span>init_processes, args<span class="op">=</span>(rank, size, run))
                     p.start()
                     processes.append(p)
             
-                <span class="cf">for</span> p <span class="op">in</span> processes:
+                <span class="cf">for</span> p <span class="kw">in</span> processes:
                     p.join()</code></pre></div>
             <p>In the above, the script spawns two processes who will each setup the distributed environment, initialize the process group (<code>dist.init_process_group</code>), and finally execute the given function.</p>
             <p>The <code>init_processes</code> function is what interests us for now. It ensures that every process will be able to coordinate through a master, using the same ip address and port. Note that we used the TCP backend, but we could have used <a href="https://en.wikipedia.org/wiki/Message_Passing_Interface">MPI</a> or <a href="http://github.com/facebookincubator/gloo">Gloo</a> instead, provided they are installed. We will go over the magic happening in <code>dist.init_process_group</code> at the end of this tutorial, but it essentially allows processes to communicate with each other by sharing their locations.</p>
@@ -258,6 +257,14 @@
             <img src='./figs/all_reduce.png' width=100% /><br/> <b>AllReduce</b>
             </td>
             </tr>
+            <tr>
+            <td align="center">
+            <img src='./figs/scatter.png' width=100% /><br/> <b>Scatter</b>
+            </td>
+            <td align="center">
+            <img src='./figs/gather.png' width=100% /><br/> <b>Gather</b>
+            </td>
+            </tr>
             </tbody>
             </table>
             <p>As opposed to point-to-point communcation, collectives allow for communication patterns across all processes in a <strong>group</strong>. A group is a subset of all your processes. To create a group, we can pass a list of ranks to <code>dist.new_group(group)</code>. By default, collectives are executed on the all processes, also known as the <strong>world</strong>. Then, in order to obtain the sum of all tensors at all processes, we can use the <code>dist.all_reduce(tensor, op, group)</code> collective.</p>
@@ -275,71 +282,124 @@
             <li><code>dist.reduce_op.MAX</code>,</li>
             <li><code>dist.reduce_op.MIN</code>.</li>
             </ul>
-            <p>In addition to <code>dist.all_reduce(tensor, op, group)</code>, there are a total of 4 collectives that are currently implemented in PyTorch.</p>
+            <p>In addition to <code>dist.all_reduce(tensor, op, group)</code>, there are a total of 6 collectives that are currently implemented in PyTorch.</p>
             <ul>
             <li><code>dist.broadcast(tensor, src, group)</code>: Copies tensor from src to all other processes.</li>
             <li><code>dist.reduce(tensor, dst, op, group)</code>: Applies op to all tensor and stores the result at dst.</li>
             <li><code>dist.all_reduce(tensor, op, group)</code>: Same as reduce, but the result is stored at all processes.</li>
+            <li><code>dist.scatter(tensor, src, scatter_list, group)</code>: Copies <code>scatter_list[i]</code> to the <span class="math inline">\(i^{\text{th}}\)</span> process.</li>
+            <li><code>dist.gather(tensor, dst, gather_list, group)</code>: Copies tensor from all processes to dst.</li>
             <li><code>dist.all_gather(tensor_list, tensor, group)</code>: Copies tensor from all processes to tensor_list, on all processes.</li>
             </ul>
-            <h3 id="what-about-scatter-and-gather">What about scatter and gather ?</h3>
-            <table>
-            <tbody>
-            <tr>
-            </tr>
-            <tr>
-            <td align="center">
-            <img src='./figs/scatter.png' width=100% /><br/> <b>Scatter</b>
-            </td>
-            <td align="center">
-            <img src='./figs/gather.png' width=100% /><br/> <b>Gather</b>
-            </td>
-            </tr>
-            </tbody>
-            </table>
-            <p>Those familiar with MPI will have noticed that the gather and scatter methods are absent from the current API. However, PyTorch exposes</p>
-            <ul>
-            <li><code>dist.scatter_send(tensor_list, tensor, group)</code>,</li>
-            <li><code>dist.scatter_recv(tensor, dst, group)</code>,</li>
-            <li><code>dist.gather_send(tensor_list, tensor, group)</code>, and</li>
-            <li><code>dist.gather_recv(tensor, dst, group)</code></li>
-            </ul>
-            <p>which can be used to implement the standard scatter and gather behaviours.</p>
-            <div class="sourceCode"><pre class="sourceCode python"><code class="sourceCode python"><span class="co">&quot;&quot;&quot; Custom scatter and gather implementation. &quot;&quot;&quot;</span>
-            
-            <span class="kw">def</span> scatter(tensor, tensor_list<span class="op">=</span><span class="va">None</span>, root<span class="op">=</span><span class="dv">0</span>, group<span class="op">=</span><span class="va">None</span>):
-                <span class="co">&quot;&quot;&quot;</span>
-            <span class="co">        Sends the ith tensor in tensor_list on root to the ith process.</span>
-            <span class="co">    &quot;&quot;&quot;</span>
-                rank <span class="op">=</span> dist.get_rank()
-                <span class="cf">if</span> group <span class="op">is</span> <span class="va">None</span>:
-                    group <span class="op">=</span> dist.group.WORLD
-                <span class="cf">if</span> rank <span class="op">==</span> root:
-                    <span class="cf">assert</span>(tensor_list <span class="op">is</span> <span class="op">not</span> <span class="va">None</span>)
-                    dist.scatter_send(tensor_list, tensor, group)
-                <span class="cf">else</span>:
-                    dist.scatter_recv(tensor, root, group)
-            
-            
-            <span class="kw">def</span> gather(tensor, tensor_list<span class="op">=</span><span class="va">None</span>, root<span class="op">=</span><span class="dv">0</span>, group<span class="op">=</span><span class="va">None</span>):
-                <span class="co">&quot;&quot;&quot;</span>
-            <span class="co">        Sends tensor to root process, which store it in tensor_list.</span>
-            <span class="co">    &quot;&quot;&quot;</span>
-                rank <span class="op">=</span> dist.get_rank()
-                <span class="cf">if</span> group <span class="op">is</span> <span class="va">None</span>:
-                    group <span class="op">=</span> dist.group.WORLD
-                <span class="cf">if</span> rank <span class="op">==</span> root:
-                    <span class="cf">assert</span>(tensor_list <span class="op">is</span> <span class="op">not</span> <span class="va">None</span>)
-                    dist.gather_recv(tensor_list, tensor, group)
-                <span class="cf">else</span>:
-                    dist.gather_send(tensor, root, group)</code></pre></div>
             <h1 id="distributed-training">Distributed Training</h1>
-            <ul>
-            <li>Gloo Backend</li>
-            <li>Simple all_reduce on the gradients</li>
-            <li>Point to optimized DistributedDataParallel</li>
-            </ul>
-            <h1 id="internals">Internals</h1>
+            <!--
+            * Gloo Backend
+            * Simple all_reduce on the gradients
+            * Point to optimized DistributedDataParallel
+            -->
+            <p><strong>Note:</strong> You can find the full script of this example <a href="https://github.com/seba-1511/dist_tuto.pth/blob/gh-pages/train_dist.py">here</a>.</p>
+            <p>Now that we understand how the distributed module works, let us write something useful with it. Our goal will be to replicate the functionality of <a href="http://pytorch.org/docs/master/nn.html#torch.nn.parallel.DistributedDataParallel">DistributedDataParallel</a>. Of course, this will be a didactic example and in a real-world situtation you should use the official, well-tested and well-optimized version linked above.</p>
+            <p>Quite simply we want to implement a distributed version of stochastic gradient descent. Our script will let all processes compute the gradients of their model on their batch of data and then average their gradients. In order to ensure replicability across runs, we will first have to partition our dataset. (You could also use <a href="https://github.com/pytorch/tnt/blob/master/torchnet/dataset/splitdataset.py#L4">tnt.dataset.SplitDataset</a>])</p>
+            <div class="sourceCode"><pre class="sourceCode python"><code class="sourceCode python"><span class="co">&quot;&quot;&quot; Dataset partitioning helper &quot;&quot;&quot;</span>
+            <span class="kw">class</span> Partition(<span class="bu">object</span>):
+            
+                <span class="kw">def</span> <span class="fu">__init__</span>(<span class="va">self</span>, data, index):
+                    <span class="va">self</span>.data <span class="op">=</span> data
+                    <span class="va">self</span>.index <span class="op">=</span> index
+            
+                <span class="kw">def</span> <span class="fu">__len__</span>(<span class="va">self</span>):
+                    <span class="cf">return</span> <span class="bu">len</span>(<span class="va">self</span>.index)
+            
+                <span class="kw">def</span> <span class="fu">__getitem__</span>(<span class="va">self</span>, index):
+                    data_idx <span class="op">=</span> <span class="va">self</span>.index[index]
+                    <span class="cf">return</span> <span class="va">self</span>.data[data_idx]
+            
+            
+            <span class="kw">class</span> DataPartitioner(<span class="bu">object</span>):
+            
+                <span class="kw">def</span> <span class="fu">__init__</span>(<span class="va">self</span>, data, sizes<span class="op">=</span>[<span class="fl">0.7</span>, <span class="fl">0.2</span>, <span class="fl">0.1</span>], seed<span class="op">=</span><span class="dv">1234</span>):
+                    <span class="va">self</span>.data <span class="op">=</span> data
+                    <span class="va">self</span>.partitions <span class="op">=</span> []
+                    rng <span class="op">=</span> Random()
+                    rng.seed(seed)
+                    data_len <span class="op">=</span> <span class="bu">len</span>(data)
+                    indexes <span class="op">=</span> [x <span class="cf">for</span> x <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">0</span>, data_len)]
+                    rng.shuffle(indexes)
+            
+                    <span class="cf">for</span> frac <span class="kw">in</span> sizes:
+                        part_len <span class="op">=</span> <span class="bu">int</span>(frac <span class="op">*</span> data_len)
+                        <span class="va">self</span>.partitions.append(indexes[<span class="dv">0</span>:part_len])
+                        indexes <span class="op">=</span> indexes[part_len:]
+            
+                <span class="kw">def</span> use(<span class="va">self</span>, partition):
+                    <span class="cf">return</span> Partition(<span class="va">self</span>.data, <span class="va">self</span>.partitions[partition])</code></pre></div>
+            <p>With the above snippet, we can now simply partition any dataset using the following few lines:</p>
+            <div class="sourceCode"><pre class="sourceCode python"><code class="sourceCode python"><span class="co">&quot;&quot;&quot; Partitioning MNIST &quot;&quot;&quot;</span>
+            <span class="kw">def</span> partition_dataset():
+                dataset <span class="op">=</span> datasets.MNIST(<span class="st">&#39;./data&#39;</span>, train<span class="op">=</span><span class="va">True</span>, download<span class="op">=</span><span class="va">True</span>,
+                                         transform<span class="op">=</span>transforms.Compose([
+                                             transforms.ToTensor(),
+                                             transforms.Normalize((<span class="fl">0.1307</span>,), (<span class="fl">0.3081</span>,))
+                                         ]))
+                size <span class="op">=</span> dist.get_world_size()
+                bsz <span class="op">=</span> <span class="dv">128</span> <span class="op">/</span> <span class="bu">float</span>(size)
+                partition_sizes <span class="op">=</span> [<span class="fl">1.0</span> <span class="op">/</span> size <span class="cf">for</span> _ <span class="kw">in</span> <span class="bu">range</span>(size)]
+                partition <span class="op">=</span> DataPartitioner(dataset, partition_sizes)
+                partition <span class="op">=</span> partition.use(dist.get_rank())
+                train_set <span class="op">=</span> torch.utils.data.DataLoader(partition,
+                                                     batch_size<span class="op">=</span>bsz,
+                                                     shuffle<span class="op">=</span><span class="va">True</span>)
+                <span class="cf">return</span> train_set, bsz</code></pre></div>
+            <p>Assuming that we have 2 replicas, then each process will have a <code>train_set</code> of 60000 / 2 = 30000 samples. We also divide the batch size by the number of replicas in order to maintain the overall batch size of 128.</p>
+            <p>We can now write our usual forward-backward-optimize training code, and include a method to average the gradients of our models. (The following is largely inspired from the official <a href="https://github.com/pytorch/examples/blob/master/mnist/main.py">PyTorch MNIST example</a>.)</p>
+            <div class="sourceCode"><pre class="sourceCode python"><code class="sourceCode python"><span class="co">&quot;&quot;&quot; Distributed Synchronous SGD Example &quot;&quot;&quot;</span>
+            <span class="kw">def</span> run(rank, size):
+                    torch.manual_seed(<span class="dv">1234</span>)
+                    train_set, bsz <span class="op">=</span> partition_dataset()
+                    model <span class="op">=</span> Net()
+                    optimizer <span class="op">=</span> optim.SGD(model.parameters(),
+                                          lr<span class="op">=</span><span class="fl">0.01</span>, momentum<span class="op">=</span><span class="fl">0.5</span>)
+            
+                    num_batches <span class="op">=</span> ceil(<span class="bu">len</span>(train_set.dataset) <span class="op">/</span> <span class="bu">float</span>(bsz)) 
+                    <span class="cf">for</span> epoch <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">10</span>):
+                        epoch_loss <span class="op">=</span> <span class="fl">0.0</span>
+                        <span class="cf">for</span> data, target <span class="kw">in</span> train_set:
+                            data, target <span class="op">=</span> Variable(data), Variable(target)
+                            optimizer.zero_grad()
+                            output <span class="op">=</span> model(data)
+                            loss <span class="op">=</span> F.nll_loss(output, target)
+                            epoch_loss <span class="op">+=</span> loss.data[<span class="dv">0</span>]
+                            loss.backward()
+                            average_gradients(model)
+                            optimizer.step()
+                        <span class="bu">print</span>(<span class="st">&#39;Rank &#39;</span>, dist.get_rank(), <span class="st">&#39;, epoch &#39;</span>,
+                              epoch, <span class="st">&#39;: &#39;</span>, epoch_loss <span class="op">/</span> num_batches) </code></pre></div>
+            <p>It remains to implement the <code>average_gradients(model)</code> function, which simply takes in a model and averages its gradients across the group.</p>
+            <div class="sourceCode"><pre class="sourceCode python"><code class="sourceCode python"><span class="co">&quot;&quot;&quot; Gradient averaging. &quot;&quot;&quot;</span>
+            <span class="kw">def</span> average_gradients(model):
+                size <span class="op">=</span> <span class="bu">float</span>(dist.get_world_size())
+                <span class="cf">for</span> param <span class="kw">in</span> model.parameters():
+                    dist.all_reduce(param.grad.data, op<span class="op">=</span>dist.reduce_op.SUM, group<span class="op">=</span><span class="dv">0</span>)
+                    param.grad.data <span class="op">/=</span> size </code></pre></div>
+            <p><em>Et voilà </em>! We successfully implemented distributed synchronous SGD and could train any model on a large computer cluster.</p>
+            <p><strong>Note:</strong> While the last sentence is <em>technically</em> true, there are <a href="http://seba-1511.github.io/dist_blog">a lot more tricks</a> required to implement a production-level implementation of synchronous SGD. Again, use what <a href="http://pytorch.org/docs/master/nn.html#torch.nn.parallel.DistributedDataParallel">has been tested</a>.</p>
+            <h1 id="advanced-topics">Advanced Topics</h1>
+            <p>We are now ready to discover some of the more advanced functionalities of <code>torch.distributed</code>. Since there is a lot to cover, this section is divided into three subsections:</p>
+            <ol style="list-style-type: decimal">
+            <li>Communication Backends: Where we learn how to use MPI and Gloo for GPU-GPU communication.</li>
+            <li>Initialization Methods: Where we understand how to best setup the initial coordination phase in <code>dist.init_process_group()</code>.</li>
+            <li>Internals: Where we take a look at what is happening under the hood.</li>
+            </ol>
+            <h2 id="communication-backends">Communication Backends</h2>
+            <p>One of the most elegant aspects of <code>torch.distributed</code> is its ability to use different backends. As mentioned before, there are currently three backends implemented in PyTorch: TCP, MPI, and Gloo. They all support different functions, depending on whether you use CPUs or GPUs. A comparative table can be found <a href="http://pytorch.org/docs/master/distributed.html#module-torch.distributed">here</a>.</p>
+            <h3 id="tcp-backend">TCP Backend</h3>
+            <h3 id="gloo-backend">Gloo Backend</h3>
+            <h3 id="mpi-backend">MPI Backend</h3>
+            <h2 id="initialization-methods">Initialization Methods</h2>
+            <h3 id="environment-variable">Environment Variable</h3>
+            <h3 id="tcp-init-multicast">TCP Init &amp; Multicast</h3>
+            <h3 id="shared-file-system">Shared File System</h3>
+            <h2 id="internals">Internals</h2>
             <ul>
             <li>The magic behind init_process_group:</li>
             </ul>
@@ -363,7 +423,7 @@
             </ul>
             
             <footer class="footer">
-                <p><b>Writing Distributed Applications wib PyTorch</b> - <i>Sebastien Arnold</i>, June 14, 2017.</p>
+                <p><b>Writing Distributed Applications with PyTorch</b> - <i>Séb Arnold</i>, June 14, 2017.</p>
             </footer>
 
         </div> <!-- /container -->
