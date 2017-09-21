@@ -401,11 +401,62 @@ The reason for changes 2. and 3. is that MPI needs to create its own environment
 
 ## Initialization Methods
 
+To finish this tutorial, let's talk about the very first function we called: `dist.init_process_group(backend, init_method)`. In particular, I would like to go over the different initialization methods which are responsible for the initial coordination between each process. Those methods allow you to define how this coordination is done. Depending on your hardware setup, one should be naturally more suitable than the others. In addition to the following sections, you should also have a look at the [official documentation](http://pytorch.org/docs/master/distributed.html#initialization).
+
+Before diving into the initialization methods, let's have a quick look at what happens behind `init_process_group` form the C/C++ perspective.
+
+1. First, the arguments are parsed and validated.
+2. The backend is resolved via the `name2channel.at()` function. A `Channel` class is returned.
+3. The GIL is dropped, and `THDProcessGroupInit()` is called. This instantiates the channel and adds the address of the master node.
+4. The process with rank 0 will initialize the `master` procedure, while all other ranks will be `workers`.
+5. The master
+    a. Creates sockets for all workers.
+    b. Waits for all workers to connect.
+    c. Sends them information about the location of the other processes.
+6. The workers
+    a. Create a socket to the master.
+    b. Send their own location information.
+    c. Receive information about the other workers.
+    d. Opens a socket and handshakes with all other workers. 
+7. The initialization is done, and everyone is connected to everyone.
+
 ### Environment Variable
+
+We have been using the environment variable initialization method throughout this tutorial. By setting the following four environment variables on all machines, all processes will be able to properly connect to the master, obtain information about the other processes, and finally handshake with them.
+
+* `MASTER_ADDR`: A free port on the machine that will host the process with rank 0.
+* `MASTER_PORT`: IP address of the machine that will host the process with rank 0.
+* `WORLD_SIZE`: The total number of processes, so that the master knows how many workers to wait for.
+* `RANK`: Rank of each process, so they will know whether it is the master of a worker.
+
+### Shared File System
+
+The shared filesystem requires all processes to have access to a shared file system, and will coordinate them through a shared file. This means that each process will open the file, write its information, and wait until everybody did so. In order to avoid race conditions, the file system must support locking through [fcntl](http://man7.org/linux/man-pages/man2/fcntl.2.html). Note that you can specify ranks manually, or let the processes figure it out by themselves. Be defining a unique `groupname` per job, you can use the same file path for multiple jobs and safely avoid collision. 
+
+~~~python
+dist.init_process_group(init_method='file:///mnt/nfs/sharedfile', world_size=4,
+                        group_name='mygroup')
+~~~
 
 ### TCP Init & Multicast
 
-### Shared File System
+Initializing via TCP can be achieved in two different ways: 
+
+1. By providing the IP address of the process with rank 0 and the world size.
+2. By providing *any* valid IP [multicast address](https://en.wikipedia.org/wiki/Multicast_address) and the world size.
+
+In the first case, all workers will be able to connect to the process with rank 0, and follow the procedure described above.
+
+~~~python
+dist.init_process_group(init_method='tcp://10.1.1.20:23456', rank=args.rank, world_size=4)
+~~~
+
+In the second case, the multicast address specifies the group of nodes who might potentially be active, and the coordination can be handled by allowing each process to have an initial handshake before following the above procedure. In addition TCP multicast initialization also supports a `group_name`argument (as with the shared file method) allowing multiple jobs to be scheduled on the same cluster.
+
+~~~python
+dist.init_process_group(init_method='tcp://[ff15:1e18:5d4c:4cf0:d02d:b659:53ba:b0a7]:23456',
+                        world_size=4)
+~~~
 
 <!--
 ## Internals
@@ -422,5 +473,15 @@ The reason for changes 2. and 3. is that MPI needs to create its own environment
 
 
 
-### Acknowledgements
+<br /><br />
+<center>**Acknowledgements**</center>
+
 <small>I'd like to thank the PyTorch developers for doing such a good job on their implementation. When the code was unclear, I could always count on the [docs]() or the [tests]() to find an answer. In particular, I'd like to thank Soumith Chintala, Adam Paszke, and Natalia Gimelshein for providing insightful comments and answering questions on early drafts.</small>
+
+<!--
+TODO: 
+* Ask: what init if using MPI ? is it even required ?
+* Can I use the same snippets as in the doc ?
+* Is the init_process_group list description accurate or is it only for TCP init ?
+* TCP Init: what if multiple processes on the node with process rank 0 ?
+-->
