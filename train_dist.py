@@ -1,4 +1,4 @@
-#!/usr/bin/env pybon
+#!/usr/bin/env python
 
 import os
 import torch
@@ -30,7 +30,6 @@ class Partition(object):
 
 
 class DataPartitioner(object):
-
     """ Partitions a dataset into different chuncks. """
 
     def __init__(self, data, sizes=[0.7, 0.2, 0.1], seed=1234):
@@ -53,6 +52,7 @@ class DataPartitioner(object):
 
 class Net(nn.Module):
     """ Network architecture. """
+
     def __init__(self):
         super(Net, self).__init__()
         self.conv1 = nn.Conv2d(1, 10, kernel_size=5)
@@ -70,21 +70,24 @@ class Net(nn.Module):
         x = self.fc2(x)
         return F.log_softmax(x)
 
+
 def partition_dataset():
     """ Partitioning MNIST """
-    dataset = datasets.MNIST('./data', train=True, download=True,
-                             transform=transforms.Compose([
-                                 transforms.ToTensor(),
-                                 transforms.Normalize((0.1307,), (0.3081,))
-                             ]))
+    dataset = datasets.MNIST(
+        './data',
+        train=True,
+        download=True,
+        transform=transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Normalize((0.1307, ), (0.3081, ))
+        ]))
     size = dist.get_world_size()
     bsz = 128 / float(size)
     partition_sizes = [1.0 / size for _ in range(size)]
     partition = DataPartitioner(dataset, partition_sizes)
     partition = partition.use(dist.get_rank())
-    train_set = torch.utils.data.DataLoader(partition,
-                                         batch_size=bsz,
-                                         shuffle=True)
+    train_set = torch.utils.data.DataLoader(
+        partition, batch_size=bsz, shuffle=True)
     return train_set, bsz
 
 
@@ -93,33 +96,37 @@ def average_gradients(model):
     size = float(dist.get_world_size())
     for param in model.parameters():
         dist.all_reduce(param.grad.data, op=dist.reduce_op.SUM, group=0)
-        param.grad.data /= size 
+        param.grad.data /= size
+
 
 def run(rank, size):
-        """ Distributed Synchronous SGD Example """
-        torch.manual_seed(1234)
-        train_set, bsz = partition_dataset()
-        model = Net()
-        optimizer = optim.SGD(model.parameters(),
-                              lr=0.01, momentum=0.5)
+    """ Distributed Synchronous SGD Example """
+    torch.manual_seed(1234)
+    train_set, bsz = partition_dataset()
+    model = Net()
+    model = model
+#    model = model.cuda(rank)
+    optimizer = optim.SGD(model.parameters(), lr=0.01, momentum=0.5)
 
-        num_batches = ceil(len(train_set.dataset) / float(bsz)) 
-        for epoch in range(10):
-            epoch_loss = 0.0
-            for data, target in train_set:
-                data, target = Variable(data), Variable(target)
-                optimizer.zero_grad()
-                output = model(data)
-                loss = F.nll_loss(output, target)
-                epoch_loss += loss.data[0]
-                loss.backward()
-                average_gradients(model)
-                optimizer.step()
-            print('Rank ', dist.get_rank(), ', epoch ',
-                  epoch, ': ', epoch_loss / num_batches) 
+    num_batches = ceil(len(train_set.dataset) / float(bsz))
+    for epoch in range(10):
+        epoch_loss = 0.0
+        for data, target in train_set:
+            data, target = Variable(data), Variable(target)
+#            data, target = Variable(data.cuda(rank)), Variable(target.cuda(rank))
+            optimizer.zero_grad()
+            output = model(data)
+            loss = F.nll_loss(output, target)
+            epoch_loss += loss.data[0]
+            loss.backward()
+            average_gradients(model)
+            optimizer.step()
+        print('Rank ',
+              dist.get_rank(), ', epoch ', epoch, ': ',
+              epoch_loss / num_batches)
 
 
-def init_processes(rank, size, fn, backend='tcp'):
+def init_processes(rank, size, fn, backend='gloo'):
     """ Initialize the distributed environment. """
     os.environ['MASTER_ADDR'] = '127.0.0.1'
     os.environ['MASTER_PORT'] = '29500'

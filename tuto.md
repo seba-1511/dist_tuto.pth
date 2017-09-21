@@ -3,7 +3,7 @@
 % June 14, 2017
 
 \begin{abstract}
- In this short tutorial, we will be going over the distributed package of PyTorch. We'll see how to set up the distributed setting, use the different communication strategies, and go over part of the internals of the package.
+In this short tutorial, we will be going over the distributed package of PyTorch. We'll see how to set up the distributed setting, use the different communication strategies, and go over part of the internals of the package.
 \end{abstract}
 
 # Setup 
@@ -173,7 +173,7 @@ Point-to-point communication is useful when we want a fine-grained control over 
 </tbody>
 </table>
 
-As opposed to point-to-point communcation, collectives allow for communication patterns across all processes in a **group**. A group is a subset of all your processes. To create a group, we can pass a list of ranks to `dist.new_group(group)`. By default, collectives are executed on the all processes, also known as the **world**. Then, in order to obtain the sum of all tensors at all processes, we can use the `dist.all_reduce(tensor, op, group)` collective.
+As opposed to point-to-point communcation, collectives allow for communication patterns across all processes in a **group**. A group is a subset of all our processes. To create a group, we can pass a list of ranks to `dist.new_group(group)`. By default, collectives are executed on the all processes, also known as the **world**. Then, in order to obtain the sum of all tensors at all processes, we can use the `dist.all_reduce(tensor, op, group)` collective.
 
 ```python
 """ All-Reduce example."""
@@ -207,6 +207,8 @@ In addition to `dist.all_reduce(tensor, op, group)`, there are a total of 6 coll
 * Gloo Backend
 * Simple all_reduce on the gradients
 * Point to optimized DistributedDataParallel
+
+TODO: Custom ring-allreduce
 -->
 
 **Note:** You can find the full script of this example [here](https://github.com/seba-1511/dist_tuto.pth/blob/gh-pages/train_dist.py).
@@ -317,6 +319,40 @@ def average_gradients(model):
 **Note:**
 While the last sentence is *technically* true, there are [a lot more tricks](http://seba-1511.github.io/dist_blog) required to implement a production-level implementation of synchronous SGD. Again, use what [has been tested](http://pytorch.org/docs/master/nn.html#torch.nn.parallel.DistributedDataParallel). 
 
+## Our Own Ring-Allreduce
+
+As an additional challenge, imagine that we wanted to implement DeepSpeech's efficient ring allreduce. This is fairly easily implemented using point-to-point collectives.
+
+~~~python
+""" Implementation of a ring-reduce with addition. """
+def allreduce(send, recv):
+    rank = dist.get_rank()
+    size = dist.get_world_size()
+    send_buff = th.zeros(send.size())
+    recv_buff = th.zeros(send.size())
+    accum = th.zeros(send.size())
+    accum[:] = send[:]
+
+    left = ((rank - 1) + size) % size
+    right = (rank + 1) % size
+
+    for i in range(size - 1):
+        if i % 2 == 0:
+            # Send send_buff
+            send_req = dist.isend(send_buff, right)
+            dist.recv(recv_buff, left)
+            accum[:] += recv[:]
+        else:
+            # Send recv_buff
+            send_req = dist.isend(recv_buff, right)
+            dist.recv(send_buff, left)
+            accum[:] += send[:]
+        send_req.wait()
+    recv[:] = accum[:]
+~~~
+
+In the above script, the `allreduce(send, recv)` function has a slightly different signature than the ones in PyTorch. It takes a `recv` tensor and will store the sum of all `send` tensors in it. There is still one difference between our version and the one in DeepSpeech, which is left as an exercise to the reader: in their implementation they divide the reduced tensor into *chunks*, so as to optimially utilize the communication bandwidth.
+
 # Advanced Topics
 
 We are now ready to discover some of the more advanced functionalities of `torch.distributed`. Since there is a lot to cover, this section is divided into three subsections:
@@ -331,9 +367,37 @@ One of the most elegant aspects of `torch.distributed` is its ability to use dif
 
 ### TCP Backend
 
+So far, we have only been using the TCP backend. It is quite handy as a development platform, as it is guaranteed to work on most machines and operating systems. It also supports all point-to-point and collective functions on CPU. However, there is no support for GPUs and its communication routines are not as optimized as MPI.
+
 ### Gloo Backend
 
+The [Gloo backend](https://github.com/facebookincubator/gloo) provides an optimized implementation of collective communication procedures, both for CPUs and GPUs. It particularly shines with GPUs as it can perform communication without transferring data to the CPU's memory using [GPUDirect](https://developer.nvidia.com/gpudirect). It is also capable of using [NCCL](https://github.com/NVIDIA/nccl) to perform fast intra-node communication and it's [own algorithms](https://github.com/facebookincubator/gloo/blob/master/docs/algorithms.md) for inter-node routines.
+
+Since version 0.2.0, the Gloo backend is automatically included with the pre-compiled binaries of PyTorch. As you have surely noticed, our distributed SGD example above does not if you put `model` on the GPU. Let's fix it by first replacing `backend='gloo'` in `init_processes(rank, size, fn, backend='tcp')`. At this point, the script will still run on CPU, but uses the Gloo backend behind the scenes. In order to use multiple GPUs, let us also do the following modifications:
+
+0. `init_processes(rank, size, fn, backend='tcp')` $\rightarrow$ `init_processes(rank, size, fn, backend='gloo')`
+1. `model = Net()` $\rightarrow$ `model = Net().cuda(rank)`
+2. `data, target = Variable(data), Variable(target)` $\rightarrow$ `data, target = Variable(data.cuda(rank)), Variable(target.cuda(rank))`
+
+With the above modifications, our model is now training on two GPUs and you can monitor their utilization with `watch nvidia-smi`.
+
 ### MPI Backend
+
+The Message Passing Interface (MPI) is a standardized tool from the field of high-performance computing. It allows to do point-to-point and collective communications and was the main inspiration for the interface of `torch.distributed`. Several implementations of MPI exist (e.g. [Open-MPI](https://www.open-mpi.org/), [MVAPICH2](http://mvapich.cse.ohio-state.edu/), [Intel MPI](https://software.intel.com/en-us/intel-mpi-library)) each optimized for different purposes. The advantage of using the MPI backend lies in MPI's wide availability - and high-level of optimization - on large clusters. [Some](https://developer.nvidia.com/mvapich) [recent](https://developer.nvidia.com/ibm-spectrum-mpi) [implementations](http://www.open-mpi.org/) are also able to take advantage of CUDA IPC and GPU Direct technologies in order to avoid memory copies through the CPU.
+
+Unfortunately, PyTorch's binaries can not include an MPI implementation and we'll have to recompile it by hand. Fortunately this process is fairly simple given that upon compilition, PyTorch will look *by itself* for an available MPI implementation. The following steps install the MPI backend, by installing PyTorch [from sources](https://github.com/pytorch/pytorch#from-source).
+
+1. Create and activate your Anaconda environment, install all the pre-requisites following [the guide](https://github.com/pytorch/pytorch#from-source), but do not run `python setup.py install` yet.
+2. Choose and install your favorite MPI implementation. Note that enabling CUDA-aware MPI might require some additional steps. In our case, we'll stick to Open-MPI *without* GPU support: `conda install -c mpi4py openmpi`
+3. Now, go to your cloned PyTorch repo and execute `python setup.py install`.
+
+In order to test our newly installed backend, a few modifications are required. 
+
+1. Replace `backend='mpi'` in `init_processes(rank, size, fn, backend='tcp')`. 
+2. Change `size = 4` to `size = 1`, right before creating the list of processes.
+3. Run `mpirun -n 4 python myscript.py`.
+
+The reason for changes 2. and 3. is that MPI needs to create its own environment before spawning the processes. This is actually quite powerful as you can pass additional arguments to `mpirun` in order to tailor computational resources for each process. (Things like number of cores per process, hand-assigning machines to specific ranks, and some more) Doing so, you should obtain the same familiar output as with the other communication backends.
 
 ## Initialization Methods
 
@@ -343,6 +407,7 @@ One of the most elegant aspects of `torch.distributed` is its ability to use dif
 
 ### Shared File System
 
+<!--
 ## Internals
 * The magic behind init_process_group:
 
@@ -353,14 +418,9 @@ One of the most elegant aspects of `torch.distributed` is its ability to use dif
 5. master: create sockets for all workers -> wait for all workers to connect -> send them each the info about location of other processes
 6. worker: create socket to master, send own info, receive info about each worker, and then handshake with each of them
 7. By this time everyone has handshake with everyone.
+-->
 
 
 
 ### Acknowledgements
-
-* PyTorch docs + well written tests.
-
-### Questions
-
-* Why scatter_send/recv and gather_send/recv ? And why no gather() / scatter() ?
-* How to get started with gloo ? Does it support ptp ?
+<small>I'd like to thank the PyTorch developers for doing such a good job on their implementation. When the code was unclear, I could always count on the [docs]() or the [tests]() to find an answer. In particular, I'd like to thank Soumith Chintala, Adam Paszke, and Natalia Gimelshein for providing insightful comments and answering questions on early drafts.</small>
