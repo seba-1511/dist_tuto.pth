@@ -392,11 +392,10 @@ Unfortunately, PyTorch's binaries can not include an MPI implementation and we'l
 
 In order to test our newly installed backend, a few modifications are required. 
 
-1. Replace `backend='mpi'` in `init_processes(rank, size, fn, backend='tcp')`. 
-2. Change `size = 4` to `size = 1`, right before creating the list of processes.
-3. Run `mpirun -n 4 python myscript.py`.
+1. Replace the content under `if __name__ == '__main__':` with `init_processes(0, 0, run, backend='mpi')`.
+2. Run `mpirun -n 4 python myscript.py`.
 
-The reason for changes 2. and 3. is that MPI needs to create its own environment before spawning the processes. This is actually quite powerful as you can pass additional arguments to `mpirun` in order to tailor computational resources for each process. (Things like number of cores per process, hand-assigning machines to specific ranks, and [some more](https://www.open-mpi.org/faq/?category=running#mpirun-hostfile)) Doing so, you should obtain the same familiar output as with the other communication backends.
+The reason for these changes is that MPI needs to create its own environment before spawning the processes. MPI will also spawn its own processes and perform the handshake described in [Initialization Methods](#initialization-methods), making the `rank`and `size` arguments of `init_process_group` superfluous. This is actually quite powerful as you can pass additional arguments to `mpirun` in order to tailor computational resources for each process. (Things like number of cores per process, hand-assigning machines to specific ranks, and [some more](https://www.open-mpi.org/faq/?category=running#mpirun-hostfile)) Doing so, you should obtain the same familiar output as with the other communication backends.
 
 ## Initialization Methods
 
