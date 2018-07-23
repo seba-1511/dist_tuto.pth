@@ -130,11 +130,10 @@ def run(rank, size):
 # Change 'backend' to appropriate backend identifier
 def init_processes(rank, size, fn, m_address, m_port, backend):
     """ Initialize the distributed environment. """
-    print("Init Processes")
+    print("Rank " + str(rank) + " connected")
     os.environ['MASTER_ADDR'] = m_address
     os.environ['MASTER_PORT'] = m_port
     dist.init_process_group(backend, rank=rank, world_size=size)
-    print("DONE INIT")
     fn(rank, size)
 
 def start_process(creds, rank, size, master_creds):
@@ -151,7 +150,9 @@ def start_process(creds, rank, size, master_creds):
     return (stdin, stdout, stderr, client)
 
 def start_thread(stream):
-    threading.Thread(target=monitor_process, args=[stream]).start()
+    thread = threading.Thread(target=monitor_process, args=[stream])
+    thread.daemon = True
+    thread.start()
 
 def monitor_process(stream):
     x = stream.readline()
@@ -159,13 +160,28 @@ def monitor_process(stream):
         print(x)
         x = stream.readline()
 
+def local_process(target, args):
+    return Process(target=target, args=args)
+
 def remote_bot(rank, size, m_address, m_port, m_backend):
     print("REMOTE BOT READY")
     init_processes(rank, size, run, m_address, m_port, m_backend)
 
+def parse_file(file_path):
+    file = open(file_path, 'r')
+    cur_line = file.readline()
+
+    while not cur_line == "":
+        items = cur_line.split(" ")
+
+        host = items[0]
+        rank = items[0].split("-")[-1]
+        slots = items[1].split("=")[1]
+
+
 if __name__ == "__main__":
 
-    if len(sys.argv) > 1:
+    if len(sys.argv) > 2:
         rank = int(sys.argv[1])
         size = int(sys.argv[2])
         remote_bot(rank, size, sys.argv[3], sys.argv[4], sys.argv[5])
@@ -175,20 +191,29 @@ if __name__ == "__main__":
         path_to_model = "dist_tuto.pth/train_distributed.py"
         password = ""
         # The address, port, and backend communication for the master process
-        master_creds = ['169.62.129.164', '29500', 'gloo']
+        master_creds = ['169.45.95.130', '29500', 'gloo']
         # List of four tuples of the address, user, password, and path to model for each
-        # process. The rank of the process corresponds to its index in this list
-        process_creds = [("169.62.129.164", "root", password, path_to_model),
-                         ("169.45.95.130",  "abutler", password, path_to_model)]
+        # process. The rank of the process corresponds to its index in this list.
+        # If local processes need to be added, add "local" instead of a four tuple
+        process_creds = [("169.45.95.130", "abutler", password, path_to_model),
+                         ("169.45.95.130", "abutler", password, path_to_model)]
 
         remote_clients = []
+        local_processes = []
+        size = len(process_creds)
 
         for process_rank in range(0, len(process_creds)):
             p_cred = process_creds[process_rank]
-            (stdin, stdout, stderr, client) = start_process(p_cred, process_rank, len(process_creds), master_creds)
-            start_thread(stdout)
-            start_thread(stderr)
-            remote_clients.append(client)
+            if p_cred == "local":
+                m_addr, m_port, backend = master_creds
+                p = local_process(init_processes, (process_rank, size, run, m_addr, m_port, backend))
+                p.start()
+                local_processes.append(p)
+            else:
+                (stdin, stdout, stderr, client) = start_process(p_cred, process_rank, size, master_creds)
+                start_thread(stdout)
+                start_thread(stderr)
+                remote_clients.append(client)
 
         while remote_clients:
             client_num = 0
