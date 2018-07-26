@@ -1,3 +1,10 @@
+"""
+Distributed Learning using distributed.init_process_group and the environment
+variable initialization method. Remote machines are accessed using Paramiko
+and processes are started on the remote machines to run the job and communicate
+back to the master process.
+"""
+
 import time
 import sys
 import os
