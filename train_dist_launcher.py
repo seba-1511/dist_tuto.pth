@@ -1,5 +1,5 @@
 """
-Distributed Learning using Pytorch's torch.distributed.launcher
+Distributed Learning using Pytorch's torch.distributed.launcher on FfDL.
 """
 
 import time
@@ -78,8 +78,9 @@ class Net(nn.Module):
 
 def partition_dataset(batch_size, is_distributed):
     """ Partitioning MNIST """
+    vision_data = os.environ.get("DATA_DIR") + "/data"
     dataset = datasets.MNIST(
-        './data',
+        vision_data,
         train=True,
         download=True,
         transform=transforms.Compose([
@@ -110,9 +111,10 @@ def average_gradients(model):
         param.grad.data /= size
 
 
-def run(rank, size, batch_size, is_gpu):
+def run(rank, world_rank, batch_size, is_gpu):
     """ Distributed Synchronous SGD Example """
     torch.manual_seed(1234)
+    size = os.environ.get("WORLD_SIZE")
     train_set, bsz = partition_dataset(batch_size, (not (size == 1)))
     # For GPU use
     if is_gpu:
@@ -142,19 +144,17 @@ def run(rank, size, batch_size, is_gpu):
             if not (size == 1):
                 average_gradients(model)
             optimizer.step()
-        print('Process ', rank,
+        print('Process ', world_rank,
               ', epoch ', epoch, ': ',
               epoch_loss / num_batches)
 
 # Change 'backend' to appropriate backend identifier
-def init_processes(local_rank, size, fn, batch_size, is_gpu, backend):
+def init_processes(local_rank, world_rank, fn, batch_size, is_gpu, backend):
     """ Initialize the distributed environment. """
-    print("Process " + str(local_rank) + " connected")
-    dist.init_process_group(backend, rank=local_rank,
-                            init_method="env://",
-                            world_size=size)
+    print("World Rank: " + str(world_rank) + "  Local Rank: " + str(local_rank)  + " connected")
+    dist.init_process_group(backend, init_method="env://")
     print("GROUP CREATED")
-    fn(local_rank, size, batch_size, is_gpu)
+    fn(local_rank, world_rank, batch_size, is_gpu)
 
 
 if __name__ == "__main__":
@@ -166,7 +166,13 @@ if __name__ == "__main__":
     local_rank = args.local_rank
     batch_size = args.batch_size
 
-    backend = 'tcp'
-    size = 2
+    world_rank = os.environ.get("RANK")
 
-    init_processes(local_rank, size, run, batch_size, False, backend)
+    backend = 'gloo'
+    start_time = time.time()
+
+    init_processes(local_rank, world_rank, run, batch_size, True, backend)
+    print("COMPLETION TIME: " + str(time.time() - start_time))
+
+    print("Destroying Process Group")
+    torch.distributed.destroy_process_group()
