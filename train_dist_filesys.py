@@ -1,3 +1,9 @@
+"""
+Distributed Learning using distributed.init_process_group and the shared file
+system method. This is made to run on a local file system, but could be adapted
+to work on other shared file systems (see train_dist_ffdl.py)
+"""
+
 import time
 import sys
 import os
